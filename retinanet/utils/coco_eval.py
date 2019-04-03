@@ -1,11 +1,9 @@
 from __future__ import print_function
 
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
+#from pycocotools.coco import COCO
+#from pycocotools.cocoeval import COCOeval
 
-import numpy as np
 import json
-import os
 
 import torch
 

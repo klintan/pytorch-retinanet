@@ -1,10 +1,12 @@
-from __future__ import print_function, division
 import sys
 import os
 import torch
 import numpy as np
 import random
 import csv
+import cv2
+
+import glob
 
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import Sampler
@@ -17,6 +19,8 @@ import skimage.color
 import skimage
 
 from PIL import Image
+
+import yaml
 
 
 class CocoDataset(Dataset):
@@ -298,14 +302,123 @@ class CSVDataset(Dataset):
         return float(image.width) / float(image.height)
 
 
-
 class BoschDataset(Dataset):
     """Bosch Traffic Light dataset.
     https://github.com/asimonov/Bosch-TL-Dataset/blob/master/model-research.ipynb
     """
-    def __init__(self):
-        pass
 
+    def __init__(self, path):
+        self.yaml_path = path
+
+        self.image_names = []
+        self.annotations = []
+
+        self.classes = ['Green'
+                        'GreenLeft',
+                        'GreenRight',
+                        'GreenStraight',
+                        'GreenStraightLeft',
+                        'GreenStraightRight',
+                        'off',
+                        'Red',
+                        'RedLeft',
+                        'RedRight',
+                        'RedRtraight',
+                        'RedRtraightLeft',
+                        'yellow']
+
+        self.name_label_mapping = {key: idx for idx, key in enumerate(self.classes)}
+        self.label_name_mapping = {v: key for key, v in self.class_idx_mapping.items()}
+        self._parse_yaml()
+
+    def load_tl_extracts(self, desired_dim=(32, 32)):
+        """
+        Loads *.png images of traffic lights from data_dirs directories.
+        Resizes them to desired_dim.
+        Extracts label name from filename (000007_redleft.png -> redleft)
+        Uses linear interpolation.
+        :param data_dirs: Paths to look for files
+        :param desired_dim: tuple for desired image size
+        :returns numpy arrays x and y, equally sized. x are images in OpenCV format (H, W, BGR), y are labels.
+        """
+        imgs = []
+        labels = []
+        for data_dir in self.data_dirs:
+            for f in glob.glob(os.path.join(data_dir, '*.png')):
+                fname = os.path.basename(f)
+                img = cv2.imread(f)  # this loads in BGR order by default
+                label = fname[7:-4]
+                resized = cv2.resize(img, desired_dim, interpolation=cv2.INTER_LINEAR)
+                imgs.append(resized)
+                labels.append(label)
+        return np.array(imgs), np.array(labels)
+
+    def _parse_yaml(self, riib=False):
+        """ Gets all labels within label file
+        Note that RGB images are 1280x720 and RIIB images are 1280x736.
+        :param input_yaml: Path to yaml file
+        :param riib: If True, change path to labeled pictures
+        :return: images: Labels for traffic lights
+        """
+        images = yaml.load(open(self.yaml_path, 'rb').read())
+        self.image_names = []
+        for i in range(len(images)):
+            self.image_names.append(os.path.join(os.path.dirname(self.yaml_path), "test",
+                                                 os.path.basename(images[i]['path'])))
+
+            if len(images[i]['boxes']) == 0:
+                continue
+
+            annotations = np.zeros((0, 5))
+            for box in images[i]['boxes']:
+                annotations = np.append(annotations, self._parse_annotations(box), axis=0)
+
+            self.annotations.append(annotations)
+
+    def _parse_annotations(self, box):
+        x1 = box['x_max']
+        x2 = box['x_min']
+        y1 = box['y_max']
+        y2 = box['y_min']
+
+        if (x2 - x1) < 1 or (y2 - y1) < 1:
+            continue
+
+        annotation = np.zeros((1, 5))
+
+        annotation[0, 0] = x1
+        annotation[0, 1] = y1
+        annotation[0, 2] = x2
+        annotation[0, 3] = y2
+
+        annotation[0, 4] = self.name_to_label(box['label'])
+        return annotation
+
+    def name_to_label(self, name):
+        return self.name_label_mapping[name]
+
+    def label_to_name(self, label):
+        return self.label_name_mapping[label]
+
+    def load_image(self, image_index):
+        img = skimage.io.imread(self.image_names[image_index])
+
+        if len(img.shape) == 2:
+            img = skimage.color.gray2rgb(img)
+
+        return img.astype(np.float32) / 255.0
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img = self.load_image(idx)
+        annot = self.annotations(idx)
+        sample = {'img': img, 'annot': annot}
+        if self.transform:
+            sample = self.transform(sample)
+
+        return sample
 
 
 def collater(data):
@@ -345,7 +458,7 @@ def collater(data):
     return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
 
 
-class Resizer(object):
+class Resizer():
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample, min_side=608, max_side=1024):
@@ -380,7 +493,7 @@ class Resizer(object):
         return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale}
 
 
-class Augmenter(object):
+class Augmenter():
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample, flip_x=0.5):
@@ -403,7 +516,7 @@ class Augmenter(object):
         return sample
 
 
-class Normalizer(object):
+class Normalizer():
 
     def __init__(self):
         self.mean = np.array([[[0.485, 0.456, 0.406]]])
@@ -415,7 +528,7 @@ class Normalizer(object):
         return {'img': ((image.astype(np.float32) - self.mean) / self.std), 'annot': annots}
 
 
-class UnNormalizer(object):
+class UnNormalizer():
     def __init__(self, mean=None, std=None):
         if mean == None:
             self.mean = [0.485, 0.456, 0.406]

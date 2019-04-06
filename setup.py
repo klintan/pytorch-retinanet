@@ -15,7 +15,9 @@ setup(
         'numpy',
         'opencv-python',
         'scikit-image',
-        'Pillow'
+        'Pillow',
+        'pyyaml',
+        'cffi'
     ],
     author='Yann Henon',
     maintainer='Andreas Klintberg',

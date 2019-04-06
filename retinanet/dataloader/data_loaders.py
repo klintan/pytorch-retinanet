@@ -2,14 +2,12 @@ import sys
 import os
 import torch
 import numpy as np
-import random
 import csv
 import cv2
 
 import glob
 
 from torch.utils.data import Dataset
-from torch.utils.data.sampler import Sampler
 
 # from pycocotools.coco import COCO
 
@@ -307,13 +305,13 @@ class BoschDataset(Dataset):
     https://github.com/asimonov/Bosch-TL-Dataset/blob/master/model-research.ipynb
     """
 
-    def __init__(self, path):
-        self.yaml_path = path
+    def __init__(self, dataset, transform=None):
+        self.yaml_path = dataset
 
         self.image_names = []
         self.annotations = []
-
-        self.classes = ['Green'
+        self.transform = transform
+        self.classes = ['Green',
                         'GreenLeft',
                         'GreenRight',
                         'GreenStraight',
@@ -325,10 +323,10 @@ class BoschDataset(Dataset):
                         'RedRight',
                         'RedRtraight',
                         'RedRtraightLeft',
-                        'yellow']
+                        'Yellow']
 
         self.name_label_mapping = {key: idx for idx, key in enumerate(self.classes)}
-        self.label_name_mapping = {v: key for key, v in self.class_idx_mapping.items()}
+        self.label_name_mapping = {v: key for key, v in self.name_label_mapping.items()}
         self._parse_yaml()
 
     def load_tl_extracts(self, desired_dim=(32, 32)):
@@ -360,10 +358,10 @@ class BoschDataset(Dataset):
         :param riib: If True, change path to labeled pictures
         :return: images: Labels for traffic lights
         """
-        images = yaml.load(open(self.yaml_path, 'rb').read())
+        images = yaml.load(open(self.yaml_path, 'rb').read(),  Loader=yaml.FullLoader)
         self.image_names = []
         for i in range(len(images)):
-            self.image_names.append(os.path.join(os.path.dirname(self.yaml_path), "test",
+            self.image_names.append(os.path.join(os.path.dirname(self.yaml_path), "images",
                                                  os.path.basename(images[i]['path'])))
 
             if len(images[i]['boxes']) == 0:
@@ -381,8 +379,8 @@ class BoschDataset(Dataset):
         y1 = box['y_max']
         y2 = box['y_min']
 
-        if (x2 - x1) < 1 or (y2 - y1) < 1:
-            continue
+        # if (x2 - x1) < 1 or (y2 - y1) < 1:
+        #    continue
 
         annotation = np.zeros((1, 5))
 
@@ -406,14 +404,21 @@ class BoschDataset(Dataset):
         if len(img.shape) == 2:
             img = skimage.color.gray2rgb(img)
 
-        return img.astype(np.float32) / 255.0
+        return np.array(img.astype(np.float32) / 255.0)
+
+    def image_aspect_ratio(self, image_index):
+        image = Image.open(self.image_names[image_index])
+        return float(image.width) / float(image.height)
+
+    def num_classes(self):
+        return len(self.classes)
 
     def __len__(self):
-        return len(self.images)
+        return len(self.image_names)
 
     def __getitem__(self, idx):
         img = self.load_image(idx)
-        annot = self.annotations(idx)
+        annot = self.annotations[idx]
         sample = {'img': img, 'annot': annot}
         if self.transform:
             sample = self.transform(sample)
@@ -456,125 +461,3 @@ def collater(data):
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
     return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
-
-
-class Resizer():
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample, min_side=608, max_side=1024):
-        image, annots = sample['img'], sample['annot']
-
-        rows, cols, cns = image.shape
-
-        smallest_side = min(rows, cols)
-
-        # rescale the image so the smallest side is min_side
-        scale = min_side / smallest_side
-
-        # check if the largest side is now greater than max_side, which can happen
-        # when images have a large aspect ratio
-        largest_side = max(rows, cols)
-
-        if largest_side * scale > max_side:
-            scale = max_side / largest_side
-
-        # resize the image with the computed scale
-        image = skimage.transform.resize(image, (int(round(rows * scale)), int(round((cols * scale)))))
-        rows, cols, cns = image.shape
-
-        pad_w = 32 - rows % 32
-        pad_h = 32 - cols % 32
-
-        new_image = np.zeros((rows + pad_w, cols + pad_h, cns)).astype(np.float32)
-        new_image[:rows, :cols, :] = image.astype(np.float32)
-
-        annots[:, :4] *= scale
-
-        return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale}
-
-
-class Augmenter():
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample, flip_x=0.5):
-        if np.random.rand() < flip_x:
-            image, annots = sample['img'], sample['annot']
-            image = image[:, ::-1, :]
-
-            rows, cols, channels = image.shape
-
-            x1 = annots[:, 0].copy()
-            x2 = annots[:, 2].copy()
-
-            x_tmp = x1.copy()
-
-            annots[:, 0] = cols - x2
-            annots[:, 2] = cols - x_tmp
-
-            sample = {'img': image, 'annot': annots}
-
-        return sample
-
-
-class Normalizer():
-
-    def __init__(self):
-        self.mean = np.array([[[0.485, 0.456, 0.406]]])
-        self.std = np.array([[[0.229, 0.224, 0.225]]])
-
-    def __call__(self, sample):
-        image, annots = sample['img'], sample['annot']
-
-        return {'img': ((image.astype(np.float32) - self.mean) / self.std), 'annot': annots}
-
-
-class UnNormalizer():
-    def __init__(self, mean=None, std=None):
-        if mean == None:
-            self.mean = [0.485, 0.456, 0.406]
-        else:
-            self.mean = mean
-        if std == None:
-            self.std = [0.229, 0.224, 0.225]
-        else:
-            self.std = std
-
-    def __call__(self, tensor):
-        """
-        Args:
-            tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
-        Returns:
-            Tensor: Normalized image.
-        """
-        for t, m, s in zip(tensor, self.mean, self.std):
-            t.mul_(s).add_(m)
-        return tensor
-
-
-class AspectRatioBasedSampler(Sampler):
-
-    def __init__(self, data_source, batch_size, drop_last):
-        self.data_source = data_source
-        self.batch_size = batch_size
-        self.drop_last = drop_last
-        self.groups = self.group_images()
-
-    def __iter__(self):
-        random.shuffle(self.groups)
-        for group in self.groups:
-            yield group
-
-    def __len__(self):
-        if self.drop_last:
-            return len(self.data_source) // self.batch_size
-        else:
-            return (len(self.data_source) + self.batch_size - 1) // self.batch_size
-
-    def group_images(self):
-        # determine the order of the images
-        order = list(range(len(self.data_source)))
-        order.sort(key=lambda x: self.data_source.image_aspect_ratio(x))
-
-        # divide into groups, one group = one batch
-        return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
-                range(0, len(order), self.batch_size)]

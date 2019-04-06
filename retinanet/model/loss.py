@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 
 def calc_iou(a, b):
     area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
@@ -28,6 +30,7 @@ class GeneralizedIOU(nn.Module):
     Implemented from g-darknet
     https://github.com/generalized-iou/g-darknet/blob/1421328ef53859a94fe8c434565e4838c3a7b03d/scripts/iou_utils.py
     """
+
     def __init__(self):
         pass
 
@@ -39,30 +42,30 @@ class GeneralizedIOU(nn.Module):
             input: 2 boxes (a,b)
             output: overlapping area, if any
         '''
-        top = max(a[0], b[0])
-        left = max(a[1], b[1])
-        bottom = min(a[2], b[2])
-        right = min(a[3], b[3])
-        h = max(bottom - top, 0)
-        w = max(right - left, 0)
+        top = torch.max(a[0], b[0])
+        left = torch.max(a[1], b[1])
+        bottom = torch.min(a[2], b[2])
+        right = torch.min(a[3], b[3])
+        h = torch.max(bottom - top, 0)
+        w = torch.max(right - left, 0)
         return h * w
 
-    def union(a, b):
+    def union(self, a, b):
         a_area = (a[2] - a[0]) * (a[3] - a[1])
         b_area = (b[2] - b[0]) * (b[3] - b[1])
-        return a_area + b_area - intersection(a, b)
+        return a_area + b_area - self.intersection(a, b)
 
     def c(self, a, b):
         '''
             input: 2 boxes (a,b)
             output: smallest enclosing bounding box
         '''
-        top = min(a[0], b[0])
-        left = min(a[1], b[1])
-        bottom = max(a[2], b[2])
-        right = max(a[3], b[3])
-        h = max(bottom - top, 0)
-        w = max(right - left, 0)
+        top = torch.min(a[0], b[0])
+        left = torch.min(a[1], b[1])
+        bottom = torch.max(a[2], b[2])
+        right = torch.max(a[3], b[3])
+        h = torch.max(bottom - top, 0)
+        w = torch.max(right - left, 0)
         return h * w
 
     def iou(self, a, b):
@@ -70,7 +73,7 @@ class GeneralizedIOU(nn.Module):
             input: 2 boxes (a,b)
             output: Itersection/Union
         '''
-        U = union(a, b)
+        U = self.union(a, b)
         if U == 0:
             return 0
         return intersection(a, b) / U
@@ -80,13 +83,14 @@ class GeneralizedIOU(nn.Module):
             input: 2 boxes (a,b)
             output: Itersection/Union - (c - U)/c
         '''
-        I = intersection(a, b)
-        U = union(a, b)
-        C = c(a, b)
+        I = self.intersection(a, b)
+        U = self.union(a, b)
+        C = self.c(a, b)
         iou_term = (I / U) if U > 0 else 0
         giou_term = ((C - U) / C) if C > 0 else 0
         # print("  I: %f, U: %f, C: %f, iou_term: %f, giou_term: %f"%(I,U,C,iou_term,giou_term))
         return iou_term - giou_term
+
 
 class FocalLoss(nn.Module):
     # def __init__(self):
@@ -114,8 +118,8 @@ class FocalLoss(nn.Module):
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
             if bbox_annotation.shape[0] == 0:
-                regression_losses.append(torch.tensor(0).float().cuda())
-                classification_losses.append(torch.tensor(0).float().cuda())
+                regression_losses.append(torch.tensor(0).float().to(DEVICE))
+                classification_losses.append(torch.tensor(0).float().to(DEVICE))
 
                 continue
 
@@ -130,7 +134,7 @@ class FocalLoss(nn.Module):
 
             # compute the loss for classification
             targets = torch.ones(classification.shape) * -1
-            targets = targets.cuda()
+            targets = targets.to(DEVICE)
 
             targets[torch.lt(IoU_max, 0.4), :] = 0
 
@@ -143,7 +147,7 @@ class FocalLoss(nn.Module):
             targets[positive_indices, :] = 0
             targets[positive_indices, assigned_annotations[positive_indices, 4].long()] = 1
 
-            alpha_factor = torch.ones(targets.shape).cuda() * alpha
+            alpha_factor = torch.ones(targets.shape).to(DEVICE) * alpha
 
             alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
             focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
@@ -154,7 +158,7 @@ class FocalLoss(nn.Module):
             # cls_loss = focal_weight * torch.pow(bce, gamma)
             cls_loss = focal_weight * bce
 
-            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).cuda())
+            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).to(DEVICE))
 
             classification_losses.append(cls_loss.sum() / torch.clamp(num_positive_anchors.float(), min=1.0))
 
@@ -185,7 +189,7 @@ class FocalLoss(nn.Module):
                 targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh))
                 targets = targets.t()
 
-                targets = targets / torch.Tensor([[0.1, 0.1, 0.2, 0.2]]).cuda()
+                targets = targets / torch.Tensor([[0.1, 0.1, 0.2, 0.2]]).to(DEVICE)
 
                 negative_indices = 1 - positive_indices
 
@@ -198,7 +202,7 @@ class FocalLoss(nn.Module):
                 )
                 regression_losses.append(regression_loss.mean())
             else:
-                regression_losses.append(torch.tensor(0).float().cuda())
+                regression_losses.append(torch.tensor(0).float().to(DEVICE))
 
         return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0,
                                                                                                                  keepdim=True)

@@ -2,16 +2,18 @@ import torch.nn as nn
 import torch
 import math
 import torch.utils.model_zoo as model_zoo
-from utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
+from retinanet.model.layers import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
 from retinanet.model.anchors import Anchors
 from retinanet.model import loss
-from retinanet.lib.nms.pth_nms import pth_nms
+#from retinanet.lib.nms.pth_nms import pth_nms
+
+from retinanet.model.nms import nms
 
 
-def nms(dets, thresh):
-    "Dispatch to either CPU or GPU NMS implementations.\
-    Accept dets as tensor"""
-    return pth_nms(dets, thresh)
+#def nms(dets, thresh):
+#    "Dispatch to either CPU or GPU NMS implementations.\
+#    Accept dets as tensor"""
+#    return pth_nms(dets, thresh)
 
 
 model_urls = {
@@ -22,6 +24,17 @@ model_urls = {
     'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
 }
 
+
+class Interpolate(nn.Module):
+    def __init__(self, size, mode):
+        super(Interpolate, self).__init__()
+        self.interp = nn.functional.interpolate
+        self.size = size
+        self.mode = mode
+
+    def forward(self, x):
+        x = self.interp(x, size=self.size, mode=self.mode, align_corners=False)
+        return x
 
 class PyramidFeatures(nn.Module):
     def __init__(self, C3_size, C4_size, C5_size, feature_size=256):

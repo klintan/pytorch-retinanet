@@ -142,7 +142,7 @@ class CSVDataset(Dataset):
             with self._open_for_csv(self.class_list) as file:
                 self.classes = self.load_classes(csv.reader(file, delimiter=','))
         except ValueError as e:
-            raise_from(ValueError('invalid CSV class file: {}: {}'.format(self.class_list, e)), None)
+            raise ValueError('invalid CSV class file: {}: {}'.format(self.class_list, e))
 
         self.labels = {}
         for key, value in self.classes.items():
@@ -153,7 +153,7 @@ class CSVDataset(Dataset):
             with self._open_for_csv(self.train_file) as file:
                 self.image_data = self._read_annotations(csv.reader(file, delimiter=','), self.classes)
         except ValueError as e:
-            raise_from(ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e)), None)
+            raise ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e))
         self.image_names = list(self.image_data.keys())
 
     def _parse(self, value, function, fmt):
@@ -188,7 +188,7 @@ class CSVDataset(Dataset):
             try:
                 class_name, class_id = row
             except ValueError:
-                raise_from(ValueError('line {}: format should be \'class_name,class_id\''.format(line)), None)
+                raise ValueError('line {}: format should be \'class_name,class_id\''.format(line))
             class_id = self._parse(class_id, int, 'line {}: malformed class ID: {{}}'.format(line))
 
             if class_name in result:
@@ -321,35 +321,13 @@ class BoschDataset(Dataset):
                         'Red',
                         'RedLeft',
                         'RedRight',
-                        'RedRtraight',
-                        'RedRtraightLeft',
+                        'RedStraight',
+                        'RedStraightLeft',
                         'Yellow']
 
         self.name_label_mapping = {key: idx for idx, key in enumerate(self.classes)}
         self.label_name_mapping = {v: key for key, v in self.name_label_mapping.items()}
         self._parse_yaml()
-
-    def load_tl_extracts(self, desired_dim=(32, 32)):
-        """
-        Loads *.png images of traffic lights from data_dirs directories.
-        Resizes them to desired_dim.
-        Extracts label name from filename (000007_redleft.png -> redleft)
-        Uses linear interpolation.
-        :param data_dirs: Paths to look for files
-        :param desired_dim: tuple for desired image size
-        :returns numpy arrays x and y, equally sized. x are images in OpenCV format (H, W, BGR), y are labels.
-        """
-        imgs = []
-        labels = []
-        for data_dir in self.data_dirs:
-            for f in glob.glob(os.path.join(data_dir, '*.png')):
-                fname = os.path.basename(f)
-                img = cv2.imread(f)  # this loads in BGR order by default
-                label = fname[7:-4]
-                resized = cv2.resize(img, desired_dim, interpolation=cv2.INTER_LINEAR)
-                imgs.append(resized)
-                labels.append(label)
-        return np.array(imgs), np.array(labels)
 
     def _parse_yaml(self, riib=False):
         """ Gets all labels within label file
@@ -361,21 +339,23 @@ class BoschDataset(Dataset):
         images = yaml.load(open(self.yaml_path, 'rb').read(), Loader=yaml.FullLoader)
         self.image_names = []
         for i in range(len(images)):
+            if len(images[i]['boxes']) == 0:
+                # Remove image from train set if we don't have any bounding boxes
+                continue
+
             self.image_names.append(os.path.join(os.path.dirname(self.yaml_path),
                                                  images[i]['path']))
-
-            if len(images[i]['boxes']) == 0:
-                continue
 
             annotations = np.zeros((0, 5))
             for box in images[i]['boxes']:
                 annotation = self._parse_annotations(box)
-                if annotation is not None:
+                if annotation is None:
                     continue
 
                 annotations = np.append(annotations, annotation, axis=0)
 
             self.annotations.append(annotations)
+        print("Num of annotations", len(self.annotations))
 
     def _parse_annotations(self, box):
         x1 = box['x_max']
@@ -383,7 +363,7 @@ class BoschDataset(Dataset):
         y1 = box['y_max']
         y2 = box['y_min']
 
-        #if (x2 - x1) < 1 or (y2 - y1) < 1:
+        # if (x2 - x1) < 1 or (y2 - y1) < 1:
         #    return None
 
         annotation = np.zeros((1, 5))
@@ -496,7 +476,7 @@ class LisaDataset(Dataset):
             try:
                 class_name, class_id = row
             except ValueError:
-                raise_from(ValueError('line {}: format should be \'class_name,class_id\''.format(line)), None)
+                raise ValueError('line {}: format should be \'class_name,class_id\''.format(line))
             class_id = self._parse(class_id, int, 'line {}: malformed class ID: {{}}'.format(line))
 
             if class_name in result:
@@ -565,9 +545,8 @@ class LisaDataset(Dataset):
             try:
                 img_file, x1, y1, x2, y2, class_name = row[:6]
             except ValueError:
-                raise_from(ValueError(
-                    'line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line)),
-                    None)
+                raise ValueError(
+                    'line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line))
 
             if img_file not in result:
                 result[img_file] = []

@@ -4,6 +4,8 @@
 - boxes:
   - {label: Green, occluded: false, x_max: 752.625, x_min: 748.875, y_max: 354.25,
     y_min: 343.375}
+  - {label: Red, occluded: false, x_max: 749.625, x_min: 738.875, y_max: 344.25,
+     y_min: 340.375}
   path: ./images/24070.png
 - boxes:
   - {label: Green, occluded: false, x_max: 753.875, x_min: 750.0, y_max: 355.625,

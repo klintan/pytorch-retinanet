@@ -141,6 +141,7 @@ def main(args=None):
             loss = classification_loss + regression_loss
 
             if bool(loss == 0):
+                print('Loss 0 | Epoch: {} |  Iteration: {} |'.format(epoch_num, iter_num))
                 continue
 
             loss.backward()

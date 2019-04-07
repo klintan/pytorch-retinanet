@@ -1,0 +1,18 @@
+- boxes:
+  - {label: Green, occluded: false, x_max: 752.25, x_min: 749.0, y_max: 355.125, y_min: 345.125}
+  path: ./images/24068.png
+- boxes:
+  - {label: Green, occluded: false, x_max: 752.625, x_min: 748.875, y_max: 354.25,
+    y_min: 343.375}
+  path: ./images/24070.png
+- boxes:
+  - {label: Green, occluded: false, x_max: 753.875, x_min: 750.0, y_max: 355.625,
+    y_min: 346.375}
+  path: ./images/24072.png
+- boxes:
+  - {label: Green, occluded: false, x_max: 754.5, x_min: 750.875, y_max: 359.375,
+    y_min: 349.25}
+  path: ./images/24074.png
+- boxes:
+  - {label: Green, occluded: false, x_max: 754.75, x_min: 751.0, y_max: 361.875, y_min: 351.5}
+  path: ./images/24076.png

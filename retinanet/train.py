@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from retinanet.model import model
 
-from retinanet.dataloader.data_loaders import CocoDataset, CSVDataset, BoschDataset, collater
+from retinanet.dataloader.data_loaders import CocoDataset, CSVDataset, BoschDataset, LisaDataset, collater
 from retinanet.dataloader.transformers import Augmenter, UnNormalizer, Normalizer, Resizer, AspectRatioBasedSampler
 from torch.utils.data import DataLoader
 
@@ -29,9 +29,10 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
+    parser.add_argument('--bosch_path', help='Path to Bosch train dataset yaml')
 
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=10)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=50)
 
     parser = parser.parse_args(args)
 
@@ -65,8 +66,16 @@ def main(args=None):
                                      transform=transforms.Compose([Normalizer(), Resizer()]))
 
     elif parser.dataset == 'bosch':
-        dataset_train = BoschDataset("data/bosch_sample.yaml",
+        if parser.bosch_path is None:
+            raise ValueError('Must provide --bosch_path when training on Bosch,')
+
+        dataset_train = BoschDataset(parser.bosch_path,
                                      transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
+        dataset_val = None
+
+    elif parser.dataset == 'lisa':
+        dataset_train = LisaDataset("data/lisa-tld/bosch_sample.yaml",
+                                    transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
         dataset_val = None
 
     else:
@@ -150,7 +159,6 @@ def main(args=None):
 
             del classification_loss
             del regression_loss
-
 
         if parser.dataset == 'coco':
 

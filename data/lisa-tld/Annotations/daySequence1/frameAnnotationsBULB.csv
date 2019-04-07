@@ -1,0 +1,5 @@
+Filename;Annotation tag;Upper left corner X;Upper left corner Y;Lower right corner X;Lower right corner Y;Origin file;Origin frame number;Origin track;Origin track frame number
+dayTest/daySequence1--00000.jpg;stop;710;481;714;486;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;0;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;0
+dayTest/daySequence1--00001.jpg;stop;710;478;715;483;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;1;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;1
+dayTest/daySequence1--00002.jpg;stop;711;478;715;482;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;2;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;2
+dayTest/daySequence1--00003.jpg;stop;712;478;715;481;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;3;dayTest/daySequence1/Day1EveningShutter0.000200-Gain-0.mp4;3

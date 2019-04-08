@@ -34,6 +34,8 @@ def main(args=None):
 
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=50)
+    parser.add_argument('--batch_size', help='Batch size (default 2)', type=int, default=2)
+
 
     parser = parser.parse_args(args)
 
@@ -87,7 +89,7 @@ def main(args=None):
     else:
         raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
 
-    sampler = AspectRatioBasedSampler(dataset_train, batch_size=2, drop_last=False)
+    sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
 
     if dataset_val is not None:
@@ -147,7 +149,7 @@ def main(args=None):
             # focalLoss((classifications, regressions), (annotations[:,:,4].long(), annotations[:,:,:4]))
             # class loss
             # classification_loss = focalLoss(classifications, torch.unsqueeze(annotations[:,:,4], dim=1).long())
-            classification_loss, regression_loss = focalLoss(classifications, regressions, anchors, data['annot'])
+            classification_loss, regression_loss = focalLoss(classifications, regressions, anchors, data['annot'].to(DEVICE))
             # bbox loss
             # regression_loss = focalLoss(regressions, annotations[:,:,:4])
 

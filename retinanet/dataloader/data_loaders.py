@@ -363,9 +363,11 @@ class BoschDataset(Dataset):
         y2 = box['y_max']
 
         if x2 <= x1:
-            raise ValueError('x2 ({}) must be higher than x1 ({})'.format(x2, x1))
+            return None
+            #raise ValueError('x2 ({}) must be higher than x1 ({})'.format(x2, x1))
         if y2 <= y1:
-            raise ValueError('y2 ({}) must be higher than y1 ({})'.format(y2, y1))
+            return None
+            #raise ValueError('y2 ({}) must be higher than y1 ({})'.format(y2, y1))
 
 
         if (x2 - x1) < 1 or (y2 - y1) < 1:

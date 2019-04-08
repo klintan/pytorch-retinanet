@@ -155,6 +155,13 @@ bird,2
 - Significant amounts of code are borrowed from the [keras retinanet implementation](https://github.com/fizyr/keras-retinanet)
 - The NMS module used is from the [pytorch faster-rcnn implementation](https://github.com/ruotianluo/pytorch-faster-rcnn)
 
+
+## License
+
+Apache 2.0
+
+See separate license notices in the data folder for the few samples that are included from different datasets. They are mostly Non-commercial CC-4.0 or similar, meaning NOT Apache 2.0 compatible, but should not be considered included in the code base. They are included as samples for simplicity.
+
 ## Examples
 
 ![img1](https://github.com/yhenon/pytorch-retinanet/blob/master/images/1.jpg)

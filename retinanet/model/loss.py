@@ -1,6 +1,7 @@
-import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -90,6 +91,119 @@ class GeneralizedIOU(nn.Module):
         giou_term = ((C - U) / C) if C > 0 else 0
         # print("  I: %f, U: %f, C: %f, iou_term: %f, giou_term: %f"%(I,U,C,iou_term,giou_term))
         return iou_term - giou_term
+
+
+# class FocalLoss(nn.Module):
+#     def __init__(self, gamma=2, alpha=0.25):
+#         """
+#             focusing is parameter that can adjust the rate at which easy
+#             examples are down-weighted.
+#             alpha may be set by inverse class frequency or treated as a hyper-param
+#             If you don't want to balance factor, set alpha to 1
+#             If you don't want to focusing factor, set gamma to 1
+#             which is same as normal cross entropy loss
+#         """
+#         super(FocalLoss, self).__init__()
+#         self.gamma = gamma
+#         self.alpha = alpha
+#
+#     def forward(self, predictions, targets):
+#         """
+#             Args:
+#                 predictions (tuple): (conf_preds, loc_preds)
+#                     conf_preds shape: [batch, n_anchors, num_cls]
+#                     loc_preds shape: [batch, n_anchors, 4]
+#                 targets (tensor): (conf_targets, loc_targets)
+#                     conf_targets shape: [batch, n_anchors]
+#                     loc_targets shape: [batch, n_anchors, 4]
+#         """
+#
+#         conf_preds, loc_preds = predictions
+#         conf_targets, loc_targets = targets
+#
+#         ############### Confiden Loss part ###############
+#         """
+#         #focal loss implementation(1)
+#         pos_cls = conf_targets > -1 # exclude ignored anchors
+#         mask = pos_cls.unsqueeze(2).expand_as(conf_preds)
+#         conf_p = conf_preds[mask].view(-1, conf_preds.size(2)).clone()
+#         conf_t = conf_targets[pos_cls].view(-1).clone()
+#         p = F.softmax(conf_p, 1)
+#         p = p.clamp(1e-7, 1. - 1e-7) # to avoid loss going to inf
+#         c_mask = conf_p.data.new(conf_p.size(0), conf_p.size(1)).fill_(0)
+#         c_mask = Variable(c_mask)
+#         ids = conf_t.view(-1, 1)
+#         c_mask.scatter_(1, ids, 1.)
+#         p_t = (p*c_mask).sum(1).view(-1, 1)
+#         p_t_log = p_t.log()
+#         # This is focal loss presented in ther paper eq(5)
+#         conf_loss = -self.alpha * ((1 - p_t)**self.gamma * p_t_log)
+#         conf_loss = conf_loss.sum()
+#         """
+#
+#         conf_targets = self.one_hot(conf_targets, 80)
+#         # focal loss implementation(2)
+#         pos_cls = conf_targets > -1
+#         mask = pos_cls.unsqueeze(2).expand_as(conf_preds)
+#         conf_p = conf_preds[mask].view(-1, conf_preds.size(2)).clone()
+#         p_t_log = -F.cross_entropy(conf_p, conf_targets[pos_cls], size_average=False)
+#         p_t = torch.exp(p_t_log)
+#
+#         # This is focal loss presented in the paper eq(5)
+#         conf_loss = -self.alpha * ((1 - p_t) ** self.gamma * p_t_log)
+#
+#         ############# Localization Loss part ##############
+#         pos = conf_targets > 0  # ignore background
+#         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_preds)
+#         loc_p = loc_preds[pos_idx].view(-1, 4)
+#         loc_t = loc_targets[pos_idx].view(-1, 4)
+#         loc_loss = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
+#
+#         num_pos = pos.long().sum(1, keepdim=True)
+#         N = max(num_pos.data.sum(),
+#                 1)  # to avoid divide by 0. It is caused by data augmentation when crop the images. The cropping can distort the boxes
+#         conf_loss /= N  # exclude number of background?
+#         loc_loss /= N
+#
+#         return conf_loss, loc_loss
+#
+#     def one_hot(self, x, n):
+#         y = torch.eye(n)
+#         return y[x]
+
+
+# class FocalLoss(nn.Module):
+#     def __init__(self, gamma=0, alpha=None, size_average=True):
+#         super(FocalLoss, self).__init__()
+#         self.gamma = gamma
+#         self.alpha = alpha
+#         if isinstance(alpha, (float, int)): self.alpha = torch.Tensor([alpha, 1 - alpha])
+#         if isinstance(alpha, list): self.alpha = torch.Tensor(alpha)
+#         self.size_average = size_average
+#
+#     def forward(self, input, target):
+#         if input.dim() > 2:
+#             input = input.view(input.size(0), input.size(1), -1)  # N,C,H,W => N,C,H*W
+#             input = input.transpose(1, 2)  # N,C,H*W => N,H*W,C
+#             input = input.contiguous().view(-1, input.size(2))  # N,H*W,C => N*H*W,C
+#         target = target.view(-1, 1)
+#
+#         logpt = F.log_softmax(input)
+#         logpt = logpt.gather(1, target)
+#         logpt = logpt.view(-1)
+#         pt = Variable(logpt.data.exp())
+#
+#         if self.alpha is not None:
+#             if self.alpha.type() != input.data.type():
+#                 self.alpha = self.alpha.type_as(input.data)
+#             at = self.alpha.gather(0, target.data.view(-1))
+#             logpt = logpt * Variable(at)
+#
+#         loss = -1 * (1 - pt) ** self.gamma * logpt
+#         if self.size_average:
+#             return loss.mean()
+#         else:
+#             return loss.sum()
 
 
 class FocalLoss(nn.Module):

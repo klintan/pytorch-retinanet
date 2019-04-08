@@ -9,7 +9,7 @@ import glob
 
 from torch.utils.data import Dataset
 
-# from pycocotools.coco import COCO
+from pycocotools.coco import COCO
 
 import skimage.io
 import skimage.transform
@@ -166,7 +166,7 @@ class CSVDataset(Dataset):
         try:
             return function(value)
         except ValueError as e:
-            raise_from(ValueError(fmt.format(e)), None)
+            raise ValueError(fmt.format(e))
 
     def _open_for_csv(self, path):
         """
@@ -257,9 +257,8 @@ class CSVDataset(Dataset):
             try:
                 img_file, x1, y1, x2, y2, class_name = row[:6]
             except ValueError:
-                raise_from(ValueError(
-                    'line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line)),
-                    None)
+                raise ValueError(
+                    'line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line))
 
             if img_file not in result:
                 result[img_file] = []
@@ -346,7 +345,7 @@ class BoschDataset(Dataset):
             self.image_names.append(os.path.join(os.path.dirname(self.yaml_path),
                                                  images[i]['path']))
 
-            annotations = np.zeros((0, 5))
+            annotations = np.zeros((0,5))
             for box in images[i]['boxes']:
                 annotation = self._parse_annotations(box)
                 if annotation is None:
@@ -358,13 +357,19 @@ class BoschDataset(Dataset):
         print("Num of annotations", len(self.annotations))
 
     def _parse_annotations(self, box):
-        x1 = box['x_max']
-        x2 = box['x_min']
-        y1 = box['y_max']
-        y2 = box['y_min']
+        x1 = box['x_min']
+        x2 = box['x_max']
+        y1 = box['y_min']
+        y2 = box['y_max']
 
-        # if (x2 - x1) < 1 or (y2 - y1) < 1:
-        #    return None
+        if x2 <= x1:
+            raise ValueError('x2 ({}) must be higher than x1 ({})'.format(x2, x1))
+        if y2 <= y1:
+            raise ValueError('y2 ({}) must be higher than y1 ({})'.format(y2, y1))
+
+
+        if (x2 - x1) < 1 or (y2 - y1) < 1:
+            return None
 
         annotation = np.zeros((1, 5))
 
@@ -430,7 +435,7 @@ class LisaDataset(Dataset):
             with self._open_for_csv(self.class_list) as file:
                 self.classes = self.load_classes(csv.reader(file, delimiter=','))
         except ValueError as e:
-            raise_from(ValueError('invalid CSV class file: {}: {}'.format(self.class_list, e)), None)
+            raise ValueError('invalid CSV class file: {}: {}'.format(self.class_list, e))
 
         self.labels = {}
         for key, value in self.classes.items():
@@ -441,7 +446,7 @@ class LisaDataset(Dataset):
             with self._open_for_csv(self.train_file) as file:
                 self.image_data = self._read_annotations(csv.reader(file, delimiter=','), self.classes)
         except ValueError as e:
-            raise_from(ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e)), None)
+            raise ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e))
         self.image_names = list(self.image_data.keys())
 
     def _parse(self, value, function, fmt):
@@ -454,7 +459,7 @@ class LisaDataset(Dataset):
         try:
             return function(value)
         except ValueError as e:
-            raise_from(ValueError(fmt.format(e)), None)
+            raise ValueError(fmt.format(e))
 
     def _open_for_csv(self, path):
         """

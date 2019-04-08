@@ -9,6 +9,7 @@ import torch.optim as optim
 from torchvision import transforms
 
 from retinanet.model import model
+from retinanet.model.loss import FocalLoss
 
 from retinanet.dataloader.data_loaders import CocoDataset, CSVDataset, BoschDataset, LisaDataset, collater
 from retinanet.dataloader.transformers import Augmenter, UnNormalizer, Normalizer, Resizer, AspectRatioBasedSampler
@@ -42,10 +43,15 @@ def main(args=None):
         if parser.coco_path is None:
             raise ValueError('Must provide --coco_path when training on COCO,')
 
-        dataset_train = CocoDataset(parser.coco_path, set_name='train2017',
+        # Small testing set from Coco
+        dataset_train = CocoDataset(parser.coco_path, set_name='sample2017',
                                     transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
-        dataset_val = CocoDataset(parser.coco_path, set_name='val2017',
-                                  transform=transforms.Compose([Normalizer(), Resizer()]))
+        dataset_val = None
+
+        # dataset_train = CocoDataset(parser.coco_path, set_name='train2017',
+        #                            transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
+        # dataset_val = CocoDataset(parser.coco_path, set_name='val2017',
+        #                          transform=transforms.Compose([Normalizer(), Resizer()]))
 
     elif parser.dataset == 'csv':
 
@@ -115,6 +121,9 @@ def main(args=None):
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
+    focalLoss = FocalLoss()
+    # focalLoss = FocalLoss(gamma=2.0, alpha=0.25)
+
     loss_hist = collections.deque(maxlen=500)
 
     retinanet.train()
@@ -133,10 +142,17 @@ def main(args=None):
 
             optimizer.zero_grad()
 
-            classification_loss, regression_loss = retinanet([data['img'].to(DEVICE).float(), data['annot']])
+            classifications, regressions, anchors = retinanet(data['img'].to(DEVICE).float())
 
-            classification_loss = classification_loss.mean()
-            regression_loss = regression_loss.mean()
+            # focalLoss((classifications, regressions), (annotations[:,:,4].long(), annotations[:,:,:4]))
+            # class loss
+            # classification_loss = focalLoss(classifications, torch.unsqueeze(annotations[:,:,4], dim=1).long())
+            classification_loss, regression_loss = focalLoss(classifications, regressions, anchors, data['annot'])
+            # bbox loss
+            # regression_loss = focalLoss(regressions, annotations[:,:,:4])
+
+            # classification_loss = classification_loss.mean()
+            # regression_loss = regression_loss.mean()
 
             loss = classification_loss + regression_loss
 

@@ -248,13 +248,7 @@ class ResNet(nn.Module):
                 layer.eval()
 
     def forward(self, inputs):
-
-        if self.training:
-            img_batch, annotations = inputs
-        else:
-            img_batch = inputs
-
-        x = self.conv1(img_batch)
+        x = self.conv1(inputs)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
@@ -270,7 +264,9 @@ class ResNet(nn.Module):
 
         classification = torch.cat([self.classificationModel(feature) for feature in features], dim=1)
 
-        anchors = self.anchors(img_batch)
+        anchors = self.anchors(inputs)
+
+        return classification, regression, anchors
 
         if self.training:
             return self.focalLoss(classification, regression, anchors, annotations)
@@ -290,7 +286,10 @@ class ResNet(nn.Module):
             transformed_anchors = transformed_anchors[:, scores_over_thresh, :]
             scores = scores[:, scores_over_thresh, :]
 
-            anchors_nms_idx = nms(torch.cat([transformed_anchors, scores], dim=2)[0, :, :], 0.5)
+            # c++ implementation
+            #anchors_nms_idx = nms(torch.cat([transformed_anchors, scores], dim=2)[0, :, :], 0.5)
+
+            anchors_nms_idx = nms(transformed_anchors[0, :, :], scores)
 
             nms_scores, nms_class = classification[0, anchors_nms_idx, :].max(dim=1)
 

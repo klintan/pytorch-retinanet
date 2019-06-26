@@ -30,12 +30,12 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
-    parser.add_argument('--bosch_path', help='Path to Bosch train dataset yaml')
+    parser.add_argument('--bosch_train', help='Path to Bosch train dataset yaml')
+    parser.add_argument('--bosch_val', help='Path to Bosch validation dataset yaml')
 
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=50)
     parser.add_argument('--batch_size', help='Batch size (default 2)', type=int, default=2)
-
 
     parser = parser.parse_args(args)
 
@@ -74,12 +74,18 @@ def main(args=None):
                                      transform=transforms.Compose([Normalizer(), Resizer()]))
 
     elif parser.dataset == 'bosch':
-        if parser.bosch_path is None:
-            raise ValueError('Must provide --bosch_path when training on Bosch,')
+        if parser.bosch_train is None:
+            raise ValueError('Must provide --bosch_train when training on Bosch,')
 
-        dataset_train = BoschDataset(parser.bosch_path,
+        dataset_train = BoschDataset(parser.bosch_train,
                                      transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
-        dataset_val = None
+
+        if parser.bosch_val is None:
+            dataset_val = None
+            print('No validation annotations provided.')
+        else:
+            dataset_val = BoschDataset(parser.bosch_val,
+                                       transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
 
     elif parser.dataset == 'lisa':
         dataset_train = LisaDataset("data/lisa-tld/bosch_sample.yaml",
@@ -149,7 +155,8 @@ def main(args=None):
             # focalLoss((classifications, regressions), (annotations[:,:,4].long(), annotations[:,:,:4]))
             # class loss
             # classification_loss = focalLoss(classifications, torch.unsqueeze(annotations[:,:,4], dim=1).long())
-            classification_loss, regression_loss = focalLoss(classifications, regressions, anchors, data['annot'].to(DEVICE))
+            classification_loss, regression_loss = focalLoss(classifications, regressions, anchors,
+                                                             data['annot'].to(DEVICE))
             # bbox loss
             # regression_loss = focalLoss(regressions, annotations[:,:,:4])
 
@@ -187,6 +194,11 @@ def main(args=None):
 
         elif parser.dataset == 'csv' and parser.csv_val is not None:
 
+            print('Evaluating dataset')
+
+            mAP = csv_eval.evaluate(dataset_val, retinanet)
+
+        elif parser.dataset == 'bosch' and parser.bosch_val is not None:
             print('Evaluating dataset')
 
             mAP = csv_eval.evaluate(dataset_val, retinanet)
